@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "Skill": {
+      "title": "Skill",
+      "description": "A generated AI skill",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "The user ID of the creator"
+        },
+        "skillName": {
+          "type": "string",
+          "description": "The name of the skill"
+        },
+        "folderStructure": {
+          "type": "string",
+          "description": "JSON stringified folder structure"
+        },
+        "skillMdContent": {
+          "type": "string",
+          "description": "The content of the SKILL.md file"
+        },
+        "optionalArtifacts": {
+          "type": "string",
+          "description": "JSON stringified optional artifacts"
+        },
+        "samplePromptText": {
+          "type": "string",
+          "description": "A sample prompt for the skill"
+        },
+        "messageToUser": {
+          "type": "string",
+          "description": "A message to the user"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "When the skill was created"
+        }
+      },
+      "required": ["uid", "skillName", "folderStructure", "skillMdContent", "optionalArtifacts", "samplePromptText", "messageToUser", "createdAt"]
+    }
+  },
+  "firestore": {
+    "skills/{skillId}": {
+      "schema": {
+        "$ref": "#/entities/Skill"
+      },
+      "description": "Generated AI skills"
+    }
+  }
+}

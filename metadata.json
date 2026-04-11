@@ -1,0 +1,5 @@
+{
+  "name": "AI Skill Creator",
+  "description": "Dynamically generate AI Skills with artifacts and iterative optimization.",
+  "requestFramePermissions": []
+}
