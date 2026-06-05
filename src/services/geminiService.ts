@@ -1,9 +1,9 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-const systemInstruction = `You are an expert AI engineer and Claude Skill Creator.
-Your task is to take a user's use case and dynamically generate all necessary artifacts to build a complete Claude Skill.
+const systemInstruction = `You are an expert AI engineer and Gemini Skill Creator.
+Your task is to take a user's use case and dynamically generate all necessary artifacts to build a complete Gemini Skill.
 
-Rules for Claude Skills:
+Rules for Gemini Skills:
 1. Structure: A skill is a folder containing a mandatory SKILL.md file. Optional subdirectories include scripts/ (for executable code), references/ (for documentation), and assets/.
 2. Naming Strictness: The folder name must be in kebab-case (no spaces, no capitals, no underscores). The main file must be exactly named SKILL.md (case-sensitive).
 3. YAML Frontmatter: The SKILL.md file MUST begin with YAML frontmatter containing:
@@ -13,7 +13,7 @@ Rules for Claude Skills:
 
 You must return your response in JSON format matching the provided schema. Include a conversational message to the user explaining what you did or asking for further optimization. Also provide a 'samplePromptText' which is a realistic example of the text or data a user would provide when prompting this skill, making the Python test script specific to the use case.`;
 
-export const createSkillChat = async (model: string = "gemini-3-flash-preview", history?: any[]) => {
+export const createSkillChat = async (model: string = "gemini-3.5-flash", history?: any[]) => {
   let apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
   
   if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {

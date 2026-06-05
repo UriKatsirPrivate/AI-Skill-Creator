@@ -98,27 +98,38 @@ export function ArtifactsPanel({ artifacts }: ArtifactsPanelProps) {
     );
   }
 
-  const pythonCode = `from claude_agent_sdk import query, ClaudeAgentOptions
+  const pythonCode = `# Test script for Gemini Skill: ${artifacts.skillName}
+# Make sure to install the Google GenAI SDK: pip install google-genai
 
-options = ClaudeAgentOptions(
-    cwd="./",
-    setting_sources=["project"],
-    allowed_tools=["Skill", "Bash"], # 'Bash' is required to run the scripts
-    model=MODEL
+import os
+from google import genai
+from google.genai import types
+
+# Initialize the Gemini client (reads GEMINI_API_KEY from environment)
+client = genai.Client()
+
+# Load the generated skill's custom instruction set
+try:
+    with open("skill.md", "r") as f:
+        skill_instructions = f.read()
+except FileNotFoundError:
+    skill_instructions = """${artifacts.skillMdContent.replace(/"""/g, '\\"\\"\\""')}"""
+
+prompt = """${artifacts.samplePromptText}"""
+
+print("Executing prompt using Gemini custom skill rules...\\n")
+
+response = client.models.generate_content(
+    model="gemini-2.5-flash",
+    contents=prompt,
+    config=types.GenerateContentConfig(
+        system_instruction=skill_instructions,
+        temperature=0.2,
+    ),
 )
 
-prompt = f"""Use the ${artifacts.skillName} skill:
-${artifacts.samplePromptText}
-"""
-
-async def run_integrated_test(): 
-    async for message in query(prompt=prompt, options=options): 
-        if hasattr(message, 'content'): 
-            for block in message.content: 
-                if hasattr(block, 'text'): 
-                    print(block.text, end="", flush=True)
-
-await run_integrated_test()`;
+print("Response from Gemini:")
+print(response.text)`;
 
   const handleDownloadZip = async () => {
     if (!artifacts) return;

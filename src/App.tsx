@@ -9,7 +9,7 @@ import { ArtifactsPanel } from './components/ArtifactsPanel';
 import { ChatMessage, SkillArtifacts } from './types';
 import { createSkillChat } from './services/geminiService';
 import { validateSkillMd } from './lib/validator';
-import { Key, LogIn, LogOut, X, Bookmark, Trash2 } from 'lucide-react';
+import { Key, LogIn, LogOut, X, Bookmark, Trash2, AlertTriangle, ExternalLink, Copy, Check } from 'lucide-react';
 import { auth, db, googleProvider } from './firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp, query, where, onSnapshot, orderBy, deleteDoc, doc, updateDoc } from 'firebase/firestore';
@@ -24,10 +24,18 @@ export default function App() {
   const [savedSkills, setSavedSkills] = useState<any[]>([]);
   const [showSavedSkills, setShowSavedSkills] = useState(false);
   const [currentSkillId, setCurrentSkillId] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState("gemini-3-flash-preview");
+  const [selectedModel, setSelectedModel] = useState("gemini-3.5-flash");
+  const [authError, setAuthError] = useState<{ code: string; message: string } | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   
   // Keep chat instance in a ref so it persists across renders
   const chatRef = useRef<any>(null);
+
+  const handleCopy = (text: string, keyName: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(keyName);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -63,14 +71,14 @@ export default function App() {
 
   const handleLogin = async () => {
     try {
+      setAuthError(null);
       await signInWithPopup(auth, googleProvider);
     } catch (error: any) {
-      console.error("Login error:", error);
-      if (error.code === 'auth/unauthorized-domain') {
-        alert(`Login failed: This domain is not authorized for Firebase Authentication. Please add your domain to the Authorized Domains list in the Firebase Console (Authentication > Settings > Authorized domains).`);
-      } else {
-        alert(`Login failed: ${error.message || 'Unknown error occurred'}`);
-      }
+      console.error("Login error confirmed:", error);
+      setAuthError({
+        code: error.code || 'unknown',
+        message: error.message || 'An unknown authentication error occurred.'
+      });
     }
   };
 
@@ -311,7 +319,7 @@ export default function App() {
               className="bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
             >
               <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
-              <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
+              <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
             </select>
           </div>
           {user ? (
@@ -388,6 +396,147 @@ export default function App() {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {authError && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-2xl flex flex-col shadow-2xl my-8">
+            <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-red-950/20">
+              <div className="flex items-center gap-2.5 text-red-400">
+                <AlertTriangle size={20} />
+                <h2 className="text-lg font-semibold">Firebase Authentication Help</h2>
+              </div>
+              <button 
+                onClick={() => setAuthError(null)} 
+                className="text-zinc-400 hover:text-white transition-colors p-1 rounded-md hover:bg-zinc-800"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6 overflow-y-auto max-h-[75vh]">
+              <div>
+                <p className="text-sm text-zinc-300">
+                  Firebase returned an error during the Google Sign-In flow. Under the Spark/Enterprise plans, referrers and OAuth domains must be explicitly authorized. Here is how to resolve this:
+                </p>
+                <div className="mt-3 p-3 bg-zinc-950 rounded-lg border border-zinc-800 text-xs font-mono text-zinc-400 break-all">
+                  <span className="text-red-400 font-semibold uppercase">Error Details:</span> {authError.message}
+                </div>
+              </div>
+
+              {/* Step 1: GCP API Key Referrer Restrictions */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-600/20 text-blue-400 text-xs font-bold">1</span>
+                  <h3 className="text-sm font-semibold text-zinc-200">Verify Website Referrer Restrictions in GCP</h3>
+                </div>
+                <div className="pl-8 space-y-2 text-sm text-zinc-400">
+                  <p>
+                    If the error mentions <code className="text-zinc-300 font-mono bg-zinc-800 px-1 py-0.5 rounded">requests-from-referer</code>, your Google Cloud API key has website security restrictions enabled. Add this site to the allowlist:
+                  </p>
+                  <ol className="list-decimal pl-4 space-y-1 bg-zinc-950/40 p-3 rounded-lg border border-zinc-800/60">
+                    <li>
+                      Go to the {" "}
+                      <a 
+                        href="https://console.cloud.google.com/apis/credentials?project=landing-zone-demo-341118" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:underline inline-flex items-center gap-1"
+                      >
+                        GCP Credentials Console <ExternalLink size={12} />
+                      </a>
+                    </li>
+                    <li>Locate and edit your browser API key.</li>
+                    <li>Under <strong>Website restrictions</strong>, add these HTTP Referrers:</li>
+                  </ol>
+                  
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-center justify-between p-2.5 bg-zinc-950 rounded border border-zinc-800 text-xs font-mono">
+                      <span>https://ais-dev-lmqt3usnnb5hdlu5zvnc33-96902608111.europe-west2.run.app/*</span>
+                      <button 
+                        onClick={() => handleCopy("https://ais-dev-lmqt3usnnb5hdlu5zvnc33-96902608111.europe-west2.run.app/*", "dev_ref")}
+                        className="text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                      >
+                        {copiedKey === "dev_ref" ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                        {copiedKey === "dev_ref" ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between p-2.5 bg-zinc-950 rounded border border-zinc-800 text-xs font-mono">
+                      <span>https://ais-pre-lmqt3usnnb5hdlu5zvnc33-96902608111.europe-west2.run.app/*</span>
+                      <button 
+                        onClick={() => handleCopy("https://ais-pre-lmqt3usnnb5hdlu5zvnc33-96902608111.europe-west2.run.app/*", "pre_ref")}
+                        className="text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                      >
+                        {copiedKey === "pre_ref" ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                        {copiedKey === "pre_ref" ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 2: Firebase Auth Authorized Domains */}
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-600/20 text-blue-400 text-xs font-bold">2</span>
+                  <h3 className="text-sm font-semibold text-zinc-200">Add Domains to Firebase Auth</h3>
+                </div>
+                <div className="pl-8 space-y-2 text-sm text-zinc-400">
+                  <p>
+                    Ensure both development and production domains are registerd inside Firebase Authentication:
+                  </p>
+                  <ol className="list-decimal pl-4 space-y-1 bg-zinc-950/40 p-3 rounded-lg border border-zinc-800/60">
+                    <li>
+                      Go to the {" "}
+                      <a 
+                        href="https://console.firebase.google.com/project/landing-zone-demo-341118/authentication/settings" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:underline inline-flex items-center gap-1"
+                      >
+                        Firebase Authentication Settings <ExternalLink size={12} />
+                      </a>
+                    </li>
+                    <li>Click on <strong>Authorized Domains</strong> &rarr; <strong>Add domain</strong>.</li>
+                    <li>Add the domains listed below:</li>
+                  </ol>
+
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-center justify-between p-2.5 bg-zinc-950 rounded border border-zinc-800 text-xs font-mono">
+                      <span>ais-dev-lmqt3usnnb5hdlu5zvnc33-96902608111.europe-west2.run.app</span>
+                      <button 
+                        onClick={() => handleCopy("ais-dev-lmqt3usnnb5hdlu5zvnc33-96902608111.europe-west2.run.app", "dev_domain")}
+                        className="text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                      >
+                        {copiedKey === "dev_domain" ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                        {copiedKey === "dev_domain" ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between p-2.5 bg-zinc-950 rounded border border-zinc-800 text-xs font-mono">
+                      <span>ais-pre-lmqt3usnnb5hdlu5zvnc33-96902608111.europe-west2.run.app</span>
+                      <button 
+                        onClick={() => handleCopy("ais-pre-lmqt3usnnb5hdlu5zvnc33-96902608111.europe-west2.run.app", "pre_domain")}
+                        className="text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                      >
+                        {copiedKey === "pre_domain" ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                        {copiedKey === "pre_domain" ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-zinc-800 bg-zinc-950 flex justify-end">
+              <button 
+                onClick={() => setAuthError(null)}
+                className="px-5 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-sm font-medium rounded-lg transition-colors"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
