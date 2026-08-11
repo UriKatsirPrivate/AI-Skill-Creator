@@ -4,7 +4,7 @@ AI Skill Creator is a powerful tool designed to help developers and AI engineers
 
 ## Features
 
-- **Dynamic Skill Generation**: Uses Gemini 3.1 Pro and Gemini 3 Flash to generate comprehensive skill artifacts.
+- **Dynamic Skill Generation**: Uses Gemini 3.1 Pro and Gemini 3.6 Flash via Vertex AI to generate comprehensive skill artifacts.
 - **Hierarchical Visualization**: View your skill's folder structure in a clear, nested tree view.
 - **Firebase Integration**:
   - **Secure Authentication**: Google Sign-in via Firebase Auth.
@@ -43,15 +43,27 @@ npm run dev
 ## Project Structure
 
 - `src/components/`: React components for the Chat and Artifacts panels.
-- `src/services/`: Integration logic for the Gemini API.
+- `src/services/geminiService.ts`: Thin client that calls the server's `/api/generate` endpoint — no Gemini SDK or credentials on the client.
 - `src/firebase.ts`: Firebase initialization and configuration.
-- `server.ts`: Express server for handling runtime environment variables and serving the app.
+- `server.ts`: Express server exposing `/api/generate` and serving the built app.
+- `server/gemini.ts`: Server-side Gemini integration — calls Vertex AI via Application Default Credentials.
 - `firestore.rules`: Security rules for protecting user data in Firestore.
+
+## Deployment
+
+The app deploys to Cloud Run via Cloud Build:
+
+```bash
+deploy/deploy.sh
+```
+
+This builds the `Dockerfile`, pushes the image to Artifact Registry, and deploys to the `ai-skill-creator` Cloud Run service (see `deploy/cloudbuild.yaml`). The runtime service account only needs `roles/aiplatform.user` — no secrets are configured.
 
 ## Security
 
-- **Least Privilege**: Firestore rules ensure users can only access their own data.
+- **Least Privilege**: Firestore rules ensure users can only access their own data; the Cloud Run runtime service account only holds `roles/aiplatform.user`.
 - **No API Keys**: Gemini is called server-side via Vertex AI using Application Default Credentials, so there is no API key to leak, store, or rotate.
+- **Sanitized Exports**: Downloaded skill ZIPs and generated test scripts sanitize AI-produced file paths and escape string content to prevent path traversal and injection.
 
 ## License
 
