@@ -13,12 +13,3 @@ export interface ChatMessage {
   artifacts?: SkillArtifacts;
   validationWarnings?: string[];
 }
-
-declare global {
-  interface Window {
-    aistudio?: {
-      hasSelectedApiKey: () => Promise<boolean>;
-      openSelectKey: () => Promise<void>;
-    };
-  }
-}

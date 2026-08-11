@@ -2,19 +2,27 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
+import { generateSkillResponse } from "./server/gemini.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
+
+  app.use(express.json());
 
   // API routes FIRST
-  app.get("/api/config", (req, res) => {
-    res.json({ 
-      apiKey: process.env.API_KEY || process.env.GEMINI_API_KEY || ""
-    });
+  app.post("/api/generate", async (req, res) => {
+    try {
+      const { model, history, message } = req.body;
+      const text = await generateSkillResponse(model, history, message);
+      res.json({ text });
+    } catch (err: any) {
+      console.error("Gemini generation error:", err);
+      res.status(500).json({ error: err?.message || "Unknown error" });
+    }
   });
 
   // Vite middleware for development

@@ -1,0 +1,89 @@
+# Cloud Build pipeline: build -> push -> deploy.
+#
+# Submit with (see deploy/README.md for the full substitution list):
+#   gcloud builds submit --config deploy/cloudbuild.yaml \
+#     --substitutions=_REGION=REGION,_SERVICE=ai-skill-creator,\
+# _RUN_SA_EMAIL=ai-skill-creator-run@PROJECT_ID.iam.gserviceaccount.com,\
+# _GOOGLE_CLOUD_LOCATION=global
+#
+# Image path: REGION-docker.pkg.dev/$PROJECT_ID/ai-skill-creator/app:$BUILD_ID
+# $PROJECT_ID and $BUILD_ID are provided automatically by Cloud Build.
+#
+# One-time setup (Artifact Registry repo, runtime service account + IAM) is
+# documented in deploy/README.md.
+
+substitutions:
+  _REGION: us-west1
+  _SERVICE: ai-skill-creator
+  # Runtime service account the Cloud Run service runs as (least privilege:
+  # only roles/aiplatform.user -- no API key, auth is Vertex AI via ADC).
+  _RUN_SA_EMAIL: ai-skill-creator-run@PROJECT_ID.iam.gserviceaccount.com
+  # Vertex AI location used for Gemini calls (server/gemini.ts). "global" is
+  # required for the newer preview models this app uses -- see server/gemini.ts.
+  _GOOGLE_CLOUD_LOCATION: global
+  # Cloud Run container resources -- this is a lightweight Express+static app.
+  _CPU: "1"
+  _MEMORY: 512Mi
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+images:
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/ai-skill-creator/app:$BUILD_ID"
+
+steps:
+  # -------------------------------------------------------------------------
+  # 1) Build the image.
+  # -------------------------------------------------------------------------
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --tag
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/ai-skill-creator/app:$BUILD_ID"
+      - --tag
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/ai-skill-creator/app:latest"
+      - .
+
+  # -------------------------------------------------------------------------
+  # 2) Push the image to Artifact Registry.
+  # -------------------------------------------------------------------------
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/ai-skill-creator/app"
+    waitFor: ["build"]
+
+  # -------------------------------------------------------------------------
+  # 3) Deploy to Cloud Run.
+  #
+  # No secrets, no API key: the app authenticates to Gemini via Vertex AI
+  # using the runtime SA's Application Default Credentials (roles/aiplatform.user).
+  # --ingress=all + --allow-unauthenticated: public app, reachable directly at
+  #   its .run.app URL (this OVERRIDES the previous AI-Studio-managed revision's
+  #   internal-and-cloud-load-balancing ingress -- see deploy/README.md).
+  # --set-env-vars REPLACES the service's entire environment -- this is
+  #   intentional here: it drops the old GEMINI_API_KEY/APPLET_ID/PROXY_CONFIG
+  #   env vars that Google AI Studio's own pipeline used to inject, since this
+  #   app no longer uses an API key at all.
+  # -------------------------------------------------------------------------
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - "${_SERVICE}"
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/ai-skill-creator/app:$BUILD_ID
+      - --region=${_REGION}
+      - --platform=managed
+      - --ingress=all
+      - --allow-unauthenticated
+      - --cpu=${_CPU}
+      - --memory=${_MEMORY}
+      - --service-account=${_RUN_SA_EMAIL}
+      - --set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=${_GOOGLE_CLOUD_LOCATION},NODE_ENV=production
+    waitFor: ["push"]

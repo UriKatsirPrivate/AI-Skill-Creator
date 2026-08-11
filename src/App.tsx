@@ -7,9 +7,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ChatPanel } from './components/ChatPanel';
 import { ArtifactsPanel } from './components/ArtifactsPanel';
 import { ChatMessage, SkillArtifacts } from './types';
-import { createSkillChat } from './services/geminiService';
+import { generateSkillResponse } from './services/geminiService';
 import { validateSkillMd } from './lib/validator';
-import { Key, LogIn, LogOut, X, Bookmark, Trash2, AlertTriangle, ExternalLink, Copy, Check } from 'lucide-react';
+import { LogIn, LogOut, X, Bookmark, Trash2, AlertTriangle, ExternalLink, Copy, Check } from 'lucide-react';
 import { auth, db, googleProvider } from './firebase';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp, query, where, onSnapshot, orderBy, deleteDoc, doc, updateDoc } from 'firebase/firestore';
@@ -18,18 +18,17 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentArtifacts, setCurrentArtifacts] = useState<SkillArtifacts | null>(null);
-  const [hasKey, setHasKey] = useState<boolean | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [savedSkills, setSavedSkills] = useState<any[]>([]);
   const [showSavedSkills, setShowSavedSkills] = useState(false);
   const [currentSkillId, setCurrentSkillId] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState("gemini-3.5-flash");
+  const [selectedModel, setSelectedModel] = useState("gemini-3.6-flash");
   const [authError, setAuthError] = useState<{ code: string; message: string } | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   
-  // Keep chat instance in a ref so it persists across renders
-  const chatRef = useRef<any>(null);
+  // Keep chat history in a ref so it persists across renders
+  const historyRef = useRef<{ role: string; parts: { text: string }[] }[]>([]);
 
   const handleCopy = (text: string, keyName: string) => {
     navigator.clipboard.writeText(text);
@@ -88,7 +87,7 @@ export default function App() {
       setMessages([]);
       setCurrentArtifacts(null);
       setCurrentSkillId(null);
-      chatRef.current = null;
+      historyRef.current = [];
     } catch (error) {
       console.error("Logout error:", error);
     }
@@ -121,47 +120,20 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    const checkApiKey = async () => {
-      if (window.aistudio?.hasSelectedApiKey) {
-        const selected = await window.aistudio.hasSelectedApiKey();
-        setHasKey(selected);
-      } else {
-        // Fallback if not running in AI Studio iframe
-        setHasKey(true);
-      }
-    };
-    checkApiKey();
-  }, []);
-
-  const handleSelectKey = async () => {
-    if (window.aistudio?.openSelectKey) {
-      await window.aistudio.openSelectKey();
-      // Assume success immediately to mitigate race condition
-      setHasKey(true);
-    }
-  };
-
   const handleSendMessage = async (text: string) => {
-    // Instantiate chat right before making the call to ensure it uses the latest key
-    if (!chatRef.current) {
-      let history = undefined;
-      if (currentArtifacts) {
-        history = [
-          { role: 'user', parts: [{ text: `Load the skill "${currentArtifacts.skillName}" and use it as context for further modifications.` }] },
-          { role: 'model', parts: [{ text: JSON.stringify(currentArtifacts) }] }
-        ];
-      }
-      chatRef.current = await createSkillChat(selectedModel, history);
+    if (historyRef.current.length === 0 && currentArtifacts) {
+      historyRef.current = [
+        { role: 'user', parts: [{ text: `Load the skill "${currentArtifacts.skillName}" and use it as context for further modifications.` }] },
+        { role: 'model', parts: [{ text: JSON.stringify(currentArtifacts) }] }
+      ];
     }
-    
+
     setMessages(prev => [...prev, { role: 'user', text }]);
     setIsLoading(true);
 
     try {
-      const response = await chatRef.current.sendMessage({ message: text });
-      const jsonText = response.text;
-      
+      const jsonText = await generateSkillResponse(selectedModel, historyRef.current, text);
+
       if (jsonText) {
         try {
           const parsed = JSON.parse(jsonText);
@@ -178,7 +150,8 @@ export default function App() {
           const warnings = validateSkillMd(artifacts.skillMdContent, artifacts.skillName);
 
           setCurrentArtifacts(artifacts);
-          
+          historyRef.current = [...historyRef.current, { role: 'user', parts: [{ text }] }, { role: 'model', parts: [{ text: jsonText }] }];
+
           if (user) {
             await saveSkillToFirestore(artifacts);
           }
@@ -202,14 +175,10 @@ export default function App() {
       
       let errorMessage = `Sorry, there was an error communicating with the AI: ${error?.message || 'Unknown error'}. Please try again.`;
       
-      if (error?.message?.includes("Requested entity was not found.")) {
-        setHasKey(false);
-        chatRef.current = null; // Reset chat so it recreates with the new key next time
-        errorMessage = "API key not found or invalid. Please select your API key again.";
-      } else if (error?.status === 429 || error?.message?.includes("429") || error?.message?.includes("quota") || error?.message?.includes("RESOURCE_EXHAUSTED")) {
+      if (error?.status === 429 || error?.message?.includes("429") || error?.message?.includes("quota") || error?.message?.includes("RESOURCE_EXHAUSTED")) {
         errorMessage = "You have exceeded your Gemini API quota or rate limit. Please check your plan and billing details at https://ai.google.dev/gemini-api/docs/rate-limits.";
-      } else if (error?.message?.includes("API key not valid")) {
-        errorMessage = "The provided API key is invalid. If you are running on Cloud Run, ensure the GEMINI_API_KEY environment variable is set correctly.";
+      } else if (error?.message?.includes("PERMISSION_DENIED") || error?.message?.includes("UNAUTHENTICATED") || error?.message?.includes("insufficient authentication scopes")) {
+        errorMessage = "The server's Google Cloud credentials don't have access to Vertex AI. Ensure the deployed service account has the \"Vertex AI User\" (roles/aiplatform.user) role and that the Vertex AI API is enabled on the project.";
       }
 
       setMessages(prev => [...prev, { 
@@ -225,7 +194,7 @@ export default function App() {
     setMessages([]);
     setCurrentArtifacts(null);
     setCurrentSkillId(null);
-    chatRef.current = null;
+    historyRef.current = [];
   };
 
   const handleDeleteSkill = async (skillId: string) => {
@@ -256,41 +225,12 @@ export default function App() {
         text: `Loaded saved skill: **${skill.skillName}**\n\n${skill.messageToUser}`,
         artifacts: loadedArtifacts
       }]);
-      chatRef.current = null;
+      historyRef.current = [];
       setShowSavedSkills(false);
     } catch (error) {
       console.error("Error loading skill:", error);
     }
   };
-
-  if (hasKey === null) {
-    return <div className="flex h-screen w-full bg-zinc-950 items-center justify-center text-zinc-500">Loading...</div>;
-  }
-
-  if (hasKey === false) {
-    return (
-      <div className="flex h-screen w-full bg-zinc-950 text-zinc-100 items-center justify-center font-sans">
-        <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-xl max-w-md w-full text-center shadow-2xl">
-          <Key className="w-12 h-12 text-blue-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-semibold mb-2">API Key Required</h2>
-          <p className="text-zinc-400 mb-6 text-sm">
-            This application requires a paid Google Cloud project API key to function. 
-            Please select your key to continue. 
-            <br/><br/>
-            <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">
-              Learn more about billing
-            </a>
-          </p>
-          <button 
-            onClick={handleSelectKey}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors"
-          >
-            Select API Key
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col h-screen w-full bg-zinc-950 text-zinc-100 overflow-hidden font-sans">
@@ -314,12 +254,12 @@ export default function App() {
               value={selectedModel}
               onChange={(e) => {
                 setSelectedModel(e.target.value);
-                chatRef.current = null; // Reset chat session when model changes
+                historyRef.current = []; // Reset chat session when model changes
               }}
               className="bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
             >
               <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
-              <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+              <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
             </select>
           </div>
           {user ? (

@@ -20,12 +20,12 @@ AI Skill Creator is a powerful tool designed to help developers and AI engineers
 
 ### Prerequisites
 
-- A Google Cloud Project with the Gemini API enabled.
+- A Google Cloud Project with the Vertex AI API enabled.
 - A Firebase Project for authentication and database features.
 
 ### Setup
 
-1. **API Key**: Ensure you have a valid Gemini API key. In the AI Studio environment, use the built-in key selection dialog.
+1. **Google Cloud Authentication**: The server calls Gemini via Vertex AI using Application Default Credentials — no API key required. Locally, run `gcloud auth application-default login`; in Cloud Run, grant the service's runtime service account the `roles/aiplatform.user` role. Set `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` (see `.env.example`).
 2. **Firebase Configuration**:
    - The app expects a `firebase-applet-config.json` file in the root directory.
    - Ensure your domain (e.g., `skill.genaitools.cloud`) is added to the **Authorized Domains** list in the Firebase Console.
@@ -51,7 +51,7 @@ npm run dev
 ## Security
 
 - **Least Privilege**: Firestore rules ensure users can only access their own data.
-- **Environment Variables**: Sensitive keys are managed server-side and injected at runtime.
+- **No API Keys**: Gemini is called server-side via Vertex AI using Application Default Credentials, so there is no API key to leak, store, or rotate.
 
 ## License
 

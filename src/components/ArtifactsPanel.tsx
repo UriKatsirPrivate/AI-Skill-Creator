@@ -8,6 +8,11 @@ interface ArtifactsPanelProps {
   artifacts: SkillArtifacts | null;
 }
 
+const sanitizeZipPath = (p: string) =>
+  p.replace(/^[a-zA-Z]:/, '').split(/[/\\]/).filter(seg => seg && seg !== '.' && seg !== '..').join('/');
+
+const escapePythonString = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
 type TreeNode = {
   name: string;
   type: 'folder' | 'file';
@@ -98,7 +103,7 @@ export function ArtifactsPanel({ artifacts }: ArtifactsPanelProps) {
     );
   }
 
-  const pythonCode = `# Test script for Gemini Skill: ${artifacts.skillName}
+  const pythonCode = `# Test script for Gemini Skill: ${artifacts.skillName.replace(/[\r\n]+/g, ' ')}
 # Make sure to install the Google GenAI SDK: pip install google-genai
 
 import os
@@ -113,9 +118,9 @@ try:
     with open("skill.md", "r") as f:
         skill_instructions = f.read()
 except FileNotFoundError:
-    skill_instructions = """${artifacts.skillMdContent.replace(/"""/g, '\\"\\"\\""')}"""
+    skill_instructions = """${escapePythonString(artifacts.skillMdContent)}"""
 
-prompt = """${artifacts.samplePromptText}"""
+prompt = """${escapePythonString(artifacts.samplePromptText)}"""
 
 print("Executing prompt using Gemini custom skill rules...\\n")
 
@@ -141,8 +146,9 @@ print(response.text)`;
     
     // Add optional artifacts
     artifacts.optionalArtifacts.forEach(artifact => {
-      // Ensure we don't have leading slashes that might confuse jszip
-      const path = artifact.filePath.replace(/^\//, '');
+      // Sanitize to prevent zip-slip / path traversal
+      const path = sanitizeZipPath(artifact.filePath);
+      if (!path) return;
       zip.file(path, artifact.content);
     });
     
