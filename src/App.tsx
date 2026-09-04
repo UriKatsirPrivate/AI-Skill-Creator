@@ -23,7 +23,7 @@ export default function App() {
   const [savedSkills, setSavedSkills] = useState<any[]>([]);
   const [showSavedSkills, setShowSavedSkills] = useState(false);
   const [currentSkillId, setCurrentSkillId] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState("gemini-3.6-flash");
+  const [selectedModel, setSelectedModel] = useState("gemini-3.8-flash");
   const [authError, setAuthError] = useState<{ code: string; message: string } | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   
@@ -258,8 +258,7 @@ export default function App() {
               }}
               className="bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
             >
-              <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
-              <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
+              <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
             </select>
           </div>
           {user ? (

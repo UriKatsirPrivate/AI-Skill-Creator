@@ -62,9 +62,9 @@ steps:
   #
   # No secrets, no API key: the app authenticates to Gemini via Vertex AI
   # using the runtime SA's Application Default Credentials (roles/aiplatform.user).
-  # --ingress=all + --allow-unauthenticated: public app, reachable directly at
-  #   its .run.app URL (this OVERRIDES the previous AI-Studio-managed revision's
-  #   internal-and-cloud-load-balancing ingress -- see deploy/README.md).
+  # --ingress=internal-and-cloud-load-balancing: not reachable directly at its
+  #   .run.app URL -- only via internal VPC traffic or a Cloud Load Balancer
+  #   (see deploy/README.md).
   # --set-env-vars REPLACES the service's entire environment -- this is
   #   intentional here: it drops the old GEMINI_API_KEY/APPLET_ID/PROXY_CONFIG
   #   env vars that Google AI Studio's own pipeline used to inject, since this
@@ -80,7 +80,7 @@ steps:
       - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/ai-skill-creator/app:$BUILD_ID
       - --region=${_REGION}
       - --platform=managed
-      - --ingress=all
+      - --ingress=internal-and-cloud-load-balancing
       - --allow-unauthenticated
       - --cpu=${_CPU}
       - --memory=${_MEMORY}
