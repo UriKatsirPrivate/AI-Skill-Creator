@@ -31,6 +31,11 @@ else
   HOST="${LOCATION}-aiplatform.googleapis.com"
 fi
 
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "python3 is required to parse API responses but was not found in PATH" >&2
+  exit 1
+fi
+
 TOKEN="$(gcloud auth application-default print-access-token)"
 
 echo "Enabling Anthropic data sharing for project ${PROJECT} @ ${LOCATION}"

@@ -210,11 +210,12 @@ export default function App() {
 
   const handleLoadSkill = (skill: any) => {
     try {
+      const parseField = (value: unknown) => typeof value === 'string' ? JSON.parse(value) : value;
       const loadedArtifacts: SkillArtifacts = {
         skillName: skill.skillName,
-        folderStructure: JSON.parse(skill.folderStructure),
+        folderStructure: parseField(skill.folderStructure),
         skillMdContent: skill.skillMdContent,
-        optionalArtifacts: JSON.parse(skill.optionalArtifacts),
+        optionalArtifacts: parseField(skill.optionalArtifacts),
         samplePromptText: skill.samplePromptText,
         messageToUser: skill.messageToUser
       };

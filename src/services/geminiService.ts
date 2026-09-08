@@ -4,9 +4,16 @@ export async function generateSkillResponse(model: string, history: { role: stri
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model, history, message }),
   });
-  const data = await res.json();
   if (!res.ok) {
-    throw new Error(data.error || `Request failed with status ${res.status}`);
+    const errorText = await res.text();
+    let errorMessage: string | undefined;
+    try {
+      errorMessage = JSON.parse(errorText).error;
+    } catch {
+      // Non-JSON error body (e.g. an HTML gateway error page); fall through to the generic message.
+    }
+    throw new Error(errorMessage || `Request failed with status ${res.status}`);
   }
+  const data = await res.json();
   return data.text;
 }

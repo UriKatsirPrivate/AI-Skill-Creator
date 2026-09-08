@@ -3,13 +3,12 @@
 # Multi-stage build for an Express + Vite React app. Targets Google Cloud Run.
 #
 # Key constraints honored here:
-#  - server.ts does `import { createServer as createViteServer } from "vite"`
-#    at the TOP LEVEL, unconditionally, even though it's only called in dev.
-#    The `vite` package must therefore exist in node_modules at runtime too --
-#    it's listed under "dependencies" in package.json for exactly this reason,
-#    so a plain `npm ci --omit=dev` in the runner stage still installs it.
-#  - server.ts runs directly via `node --experimental-strip-types` (no bundling),
-#    so server.ts and server/ are copied into the runner as source, not built.
+#  - server.ts imports `vite` dynamically, only inside the dev-only code path,
+#    so the `vite` package (a devDependency) never needs to exist in the
+#    production runner's node_modules.
+#  - `npm run build` bundles server.ts + server/ into dist/server.js via esbuild
+#    (see package.json's `build:server` script), so the runner stage ships and
+#    runs plain JS with plain `node` -- no --experimental-strip-types needed.
 #  - Cloud Run injects PORT; server.ts reads process.env.PORT (falls back to
 #    3000 for local `npm run dev`/`npm start`). Never hardcode PORT here.
 #  - firebase-applet-config.json is imported as a static JSON import by
@@ -46,8 +45,6 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
-COPY server.ts ./server.ts
-COPY server ./server
 
 RUN chown -R node:node /app
 USER node
@@ -55,4 +52,4 @@ USER node
 # Documentation only; Cloud Run routes to $PORT regardless of EXPOSE.
 EXPOSE 8080
 
-CMD ["node", "--experimental-strip-types", "server.ts"]
+CMD ["node", "dist/server.js"]

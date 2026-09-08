@@ -49,7 +49,7 @@ const responseSchema = {
 export async function generateSkillResponse(model: string, history: any[], message: string): Promise<string> {
   const ai = new GoogleGenAI({
     vertexai: true,
-    project: process.env.GOOGLE_CLOUD_PROJECT || "landing-zone-demo-341118",
+    project: process.env.GOOGLE_CLOUD_PROJECT,
     location: process.env.GOOGLE_CLOUD_LOCATION || "global",
   });
 
